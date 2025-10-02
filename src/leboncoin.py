@@ -1,5 +1,64 @@
 import requests
 import time
+import json
+import unicodedata
+import re
+
+
+def normalize_key(key):
+    """Supprime accents, espaces et caractères spéciaux, met en minuscules."""
+    if not key:
+        return None
+    key = (
+        unicodedata.normalize("NFKD", key)
+        .encode("ASCII", "ignore")
+        .decode("ASCII")
+    )
+    key = re.sub(r"[ '\-()]", "_", key)
+    key = re.sub(r"_+", "_", key)  # éviter les double _
+    key = key.strip("_")
+    return key.lower()
+
+
+# Champs à récupérer depuis attributes
+ATTR_FIELDS = [
+    "Marque",
+    "Modèle",
+    "Année modèle",
+    "Kilométrage",
+    "Énergie",
+    "Boîte de vitesse",
+    "Nombre de portes",
+    "Nombre de place(s)",
+    "Version Constructeur",
+    "Date de première mise en circulation",
+    "Type de véhicule",
+    "Couleur",
+    "Crit'Air",
+    "Puissance fiscale",
+    "Puissance DIN",
+    "Permis",
+    "Référence",
+    "Durée de disponibilité des pièces détachées",
+]
+
+# Mapping des champs location en français
+LOCATION_MAPPING_FR = {
+    "country_id": "pays",
+    "region_id": "id_region",
+    "region_name": "region",
+    "department_id": "id_departement",
+    "department_name": "departement",
+    "city_label": "ville_affichee",
+    "city": "ville",
+    "zipcode": "code_postal",
+    "lat": "latitude",
+    "lng": "longitude",
+    "source": "source",
+    "provider": "fournisseur",
+    "is_shape": "forme_existante",
+    "feature": "feature",
+}
 
 cookies = {
     "__Secure-Install": "36ae2011-5d35-4273-9d08-d42eb458331f",
@@ -55,10 +114,37 @@ LIMIT_TO_SAVE = 100
 FILE_NAME = f"./outputs/{time.time()}.csv"
 
 
-def parse_ad(ad: dict) -> dict:
-    parsed_ad = {}
+def extract_ad_data(ad: dict) -> dict:
+    ad_info = {}
 
-    return parsed_ad
+    # Champs directs
+    ad_info["url"] = ad.get("url")
+    ad_info["first_publication_date"] = ad.get("first_publication_date")
+    ad_info["index_date"] = ad.get("index_date")
+    ad_info["price"] = ad.get("price", [None])[0] if ad.get("price") else None
+
+    # Attributes
+    attr_dict = {normalize_key(f): None for f in ATTR_FIELDS}
+    for attr in ad.get("attributes", []):
+        key_label = attr.get("key_label")
+        value_label = attr.get("value_label")
+        norm_key = normalize_key(key_label)
+        if norm_key in attr_dict:
+            if value_label is not None:
+                attr_dict[norm_key] = value_label
+            else:
+                values_label = attr.get("values_label", [])
+                attr_dict[norm_key] = values_label[0] if values_label else None
+    ad_info.update(attr_dict)
+
+    # Location : traduction en français et normalisation
+    location = ad.get("location", {})
+    loc_dict = {
+        normalize_key(new_key): location.get(orig_key, None)
+        for orig_key, new_key in LOCATION_MAPPING_FR.items()
+    }
+    ad_info.update(loc_dict)
+    return ad_info
 
 
 def scrape_one_page(offset: int):
@@ -97,7 +183,8 @@ def scrape_one_page(offset: int):
         return None
     print(f"Total ADS - {len(ads)}")
     for ad in ads:
-        parsed_ad = parse_ad(ad)
+        parsed_ad = extract_ad_data(ad)
+        print(parsed_ad)
 
 
 scrape_one_page(3000)
