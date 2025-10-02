@@ -1,41 +1,10 @@
-import requests
 import time
-import json
+from pathlib import Path
+import requests
 import unicodedata
 import re
 import os
-import csv
-
-def normalize_key(key):
-    """Supprime accents, espaces et caractères spéciaux, met en minuscules."""
-    if not key:
-        return None
-    key = (
-        unicodedata.normalize("NFKD", key)
-        .encode("ASCII", "ignore")
-        .decode("ASCII")
-    )
-    key = re.sub(r"[ '\-()]", "_", key)
-    key = re.sub(r"_+", "_", key)  # éviter les doubles _
-    key = key.strip("_")
-    return key.lower()
-
-PROGRESS_FILE = "progress.txt"
-
-def get_progress():
-    """Lit l’offset depuis progress.txt, retourne 0 si absent"""
-    if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, "r") as f:
-            try:
-                return int(f.read().strip())
-            except ValueError:
-                return 0
-    return 0
-
-def save_progress(offset):
-    """Sauvegarde l’offset dans progress.txt"""
-    with open(PROGRESS_FILE, "w") as f:
-        f.write(str(offset))
+import pandas as pd
 
 # Champs à récupérer depuis attributes
 ATTR_FIELDS = [
@@ -127,17 +96,43 @@ headers = {
 }
 
 LIMIT = 100
-FILE_NAME = "./outputs/leboncoin_scraping.csv"
+MAX_ITERATIONS = 10
+Path("./outputs").mkdir(exist_ok=True)
+FILE_NAME = f"./outputs/{time.time()}.csv"
+PROGRESS_FILE = "progress.txt"
 
-def save_to_csv(filename, rows, fieldnames):
-    """Écrit les données dans un CSV unique"""
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    mode = "a" if os.path.exists(filename) else "w"
-    with open(filename, mode, newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if mode == "w":  # écrire l'en-tête seulement si nouveau fichier
-            writer.writeheader()
-        writer.writerows(rows)
+
+def normalize_key(key):
+    """Supprime accents, espaces et caractères spéciaux, met en minuscules."""
+    if not key:
+        return None
+    key = (
+        unicodedata.normalize("NFKD", key)
+        .encode("ASCII", "ignore")
+        .decode("ASCII")
+    )
+    key = re.sub(r"[ '\-()]", "_", key)
+    key = re.sub(r"_+", "_", key)  # éviter les doubles _
+    key = key.strip("_")
+    return key.lower()
+
+
+def get_progress():
+    """Lit l’offset depuis progress.txt, retourne 0 si absent"""
+    if os.path.exists(PROGRESS_FILE):
+        with open(PROGRESS_FILE, "r") as f:
+            try:
+                return int(f.read().strip())
+            except ValueError:
+                return 0
+    return 0
+
+
+def save_progress(offset):
+    """Sauvegarde l’offset dans progress.txt"""
+    with open(PROGRESS_FILE, "w") as f:
+        f.write(str(offset))
+
 
 def extract_ad_data(ad: dict) -> dict:
     ad_info = {}
@@ -172,6 +167,7 @@ def extract_ad_data(ad: dict) -> dict:
     ad_info.update(loc_dict)
     return ad_info
 
+
 def scrape_one_page(offset: int):
     """Scrape une page et retourne les annonces parsées"""
     json_data = {
@@ -196,7 +192,7 @@ def scrape_one_page(offset: int):
     try:
         data = response.json()
     except Exception:
-        print("Réponse non JSON :", response.text[:300])
+        print("Réponse non JSON :")
         return None
 
     ads = data.get("ads")
@@ -206,38 +202,30 @@ def scrape_one_page(offset: int):
     print(f"Page offset={offset} → {len(ads)} annonces")
     return [extract_ad_data(ad) for ad in ads]
 
-def count_csv_lines(filename):
-    """Compte les lignes d'un CSV (sans l'en-tête)"""
-    if not os.path.exists(filename):
-        return 0
-    with open(filename, "r", encoding="utf-8") as f:
-        return sum(1 for _ in f) - 1  # retirer l'en-tête
 
-def scrape_all(max_pages=100):
+def scrape_all():
     offset = get_progress()
     print(f"Reprise depuis offset {offset}")
-    fieldnames = None
     pages_scraped = 0
+    outputs_ads = []
 
-    while pages_scraped < max_pages:
+    while pages_scraped < MAX_ITERATIONS:
         ads_data = scrape_one_page(offset)
         if not ads_data:
             print("Fin du scraping, plus d’annonces.")
             break
 
-        if not fieldnames:
-            fieldnames = list(ads_data[0].keys())
-
-        save_to_csv(FILE_NAME, ads_data, fieldnames)
-        save_progress(offset + LIMIT)
+        outputs_ads.extend(ads_data)
 
         offset += LIMIT
         pages_scraped += 1
 
-        total_lignes = count_csv_lines(FILE_NAME)
-        print(f"Lignes ajoutées : {len(ads_data)} → Total exact dans le CSV : {total_lignes}")
+    save_progress(offset)
+    df = pd.DataFrame(outputs_ads)
+    df.to_csv(FILE_NAME, index=False)
 
     print(f"Scraping terminé : {pages_scraped} pages traitées")
 
+
 if __name__ == "__main__":
-    scrape_all(max_pages=100)  # 100 pages × 100 annonces = 10 000 annonces
+    scrape_all()  # 100 pages × 100 annonces = 10 000 annonces
