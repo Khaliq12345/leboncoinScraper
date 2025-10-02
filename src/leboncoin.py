@@ -3,7 +3,8 @@ import time
 import json
 import unicodedata
 import re
-
+import os
+import csv
 
 def normalize_key(key):
     """Supprime accents, espaces et caractères spéciaux, met en minuscules."""
@@ -18,6 +19,26 @@ def normalize_key(key):
     key = re.sub(r"_+", "_", key)  # éviter les double _
     key = key.strip("_")
     return key.lower()
+
+
+PROGRESS_FILE = "progress.txt"
+
+PROGRESS_FILE = "progress.txt"
+
+def get_progress():
+    """Lit l’offset depuis progress.txt, retourne 0 si absent"""
+    if os.path.exists(PROGRESS_FILE):
+        with open(PROGRESS_FILE, "r") as f:
+            try:
+                return int(f.read().strip())
+            except ValueError:
+                return 0
+    return 0
+
+def save_progress(offset):
+    """Sauvegarde l’offset dans progress.txt"""
+    with open(PROGRESS_FILE, "w") as f:
+        f.write(str(offset))
 
 
 # Champs à récupérer depuis attributes
@@ -57,8 +78,8 @@ LOCATION_MAPPING_FR = {
     "source": "source",
     "provider": "fournisseur",
     "is_shape": "forme_existante",
-    "feature": "feature",
 }
+
 
 cookies = {
     "__Secure-Install": "36ae2011-5d35-4273-9d08-d42eb458331f",
@@ -91,6 +112,7 @@ cookies = {
     "_ga_Z707449XJ2": "GS2.1.s1759389296$o17$g1$t1759389825$j50$l0$h152971888",
 }
 
+
 headers = {
     "accept": "*/*",
     "accept-language": "en-US,en;q=0.9",
@@ -110,9 +132,17 @@ headers = {
 }
 
 LIMIT = 100
-LIMIT_TO_SAVE = 100
-FILE_NAME = f"./outputs/{time.time()}.csv"
+FILE_NAME = f"./outputs/leboncoin_scraping.csv"
 
+def save_to_csv(filename, rows, fieldnames):
+    """Écrit les données dans un CSV unique"""
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    mode = "a" if os.path.exists(filename) else "w"
+    with open(filename, mode, newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if mode == "w":  # écrire l'en-tête seulement si nouveau fichier
+            writer.writeheader()
+        writer.writerows(rows)
 
 def extract_ad_data(ad: dict) -> dict:
     ad_info = {}
@@ -137,37 +167,27 @@ def extract_ad_data(ad: dict) -> dict:
                 attr_dict[norm_key] = values_label[0] if values_label else None
     ad_info.update(attr_dict)
 
-    # Location : traduction en français et normalisation
+    # Location
     location = ad.get("location", {})
     loc_dict = {
         normalize_key(new_key): location.get(orig_key, None)
         for orig_key, new_key in LOCATION_MAPPING_FR.items()
+        if orig_key != "feature"
     }
     ad_info.update(loc_dict)
     return ad_info
 
-
 def scrape_one_page(offset: int):
-    """Scrape and validate all ads from a single page"""
+    """Scrape une page et retourne les annonces parsées"""
     json_data = {
         "filters": {
-            "category": {
-                "id": "2",
-            },
-            "enums": {
-                "ad_type": [
-                    "offer",
-                ],
-            },
+            "category": {"id": "2"},
+            "enums": {"ad_type": ["offer"]},
         },
         "limit": LIMIT,
-        "limit_alu": 3,
-        "sort_by": "relevance",
         "offset": offset,
+        "sort_by": "relevance",
         "disable_total": True,
-        "pivot": '{"ids_to_display":["3067616489","3067616465","3012611449","3049618246","3067616335","3022136896","3050803884","3067616295","3067616271","3064705084","3067616280","3054062755","3067616107","3054874123","3054085385","3057915347","3031382464","3067616115","3067616141","3002665047","3067616116","3027206868","2919931453","3064680234","3067616068","3067616054","3067616025","3067187181","3067616010","3067616008","3067615986","3067615985","3067615421","3067615990","3064718287"],"es_pivot":"1759389290000|3064718287","reranker_offset":35,"total":738204,"page_number":1}',
-        "referrer_id": "9ab05549-28c7-4183-ae80-0e181ddd0fda",
-        "extend": True,
         "listing_source": "pagination",
     }
 
@@ -177,14 +197,45 @@ def scrape_one_page(offset: int):
         headers=headers,
         json=json_data,
     )
-    data = response.json()
+
+    try:
+        data = response.json()
+    except Exception:
+        print("Réponse non JSON :", response.text[:300])
+        return None
+
     ads = data.get("ads")
     if not ads:
         return None
-    print(f"Total ADS - {len(ads)}")
-    for ad in ads:
-        parsed_ad = extract_ad_data(ad)
-        print(parsed_ad)
 
+    print(f"Page offset={offset} → {len(ads)} annonces")
+    return [extract_ad_data(ad) for ad in ads]
 
-scrape_one_page(3000)
+def scrape_all():
+    offset = get_progress()
+    print(f"Reprise depuis offset {offset}")
+    fieldnames = None
+
+    while True:
+        ads_data = scrape_one_page(offset)
+        if not ads_data:
+            print("Fin du scraping, plus d’annonces.")
+            break
+
+        if not fieldnames:
+            fieldnames = list(ads_data[0].keys())
+
+        save_to_csv(FILE_NAME, ads_data, fieldnames)
+        save_progress(offset + LIMIT) 
+
+        offset += LIMIT
+
+        # Si tu veux le rendre automatique → commente ce bloc
+
+        cont = input("Voulez-vous continuer ? (o/n) : ").strip().lower()
+        if cont != "o":
+            print("⏹ Arrêt du scraping par l’utilisateur.")
+            break
+
+if __name__ == "__main__":
+    scrape_all()
