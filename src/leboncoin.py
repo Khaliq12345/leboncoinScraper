@@ -16,12 +16,9 @@ def normalize_key(key):
         .decode("ASCII")
     )
     key = re.sub(r"[ '\-()]", "_", key)
-    key = re.sub(r"_+", "_", key)  # éviter les double _
+    key = re.sub(r"_+", "_", key)  # éviter les doubles _
     key = key.strip("_")
     return key.lower()
-
-
-PROGRESS_FILE = "progress.txt"
 
 PROGRESS_FILE = "progress.txt"
 
@@ -39,7 +36,6 @@ def save_progress(offset):
     """Sauvegarde l’offset dans progress.txt"""
     with open(PROGRESS_FILE, "w") as f:
         f.write(str(offset))
-
 
 # Champs à récupérer depuis attributes
 ATTR_FIELDS = [
@@ -79,7 +75,6 @@ LOCATION_MAPPING_FR = {
     "provider": "fournisseur",
     "is_shape": "forme_existante",
 }
-
 
 cookies = {
     "__Secure-Install": "36ae2011-5d35-4273-9d08-d42eb458331f",
@@ -132,7 +127,7 @@ headers = {
 }
 
 LIMIT = 100
-FILE_NAME = f"./outputs/leboncoin_scraping.csv"
+FILE_NAME = "./outputs/leboncoin_scraping.csv"
 
 def save_to_csv(filename, rows, fieldnames):
     """Écrit les données dans un CSV unique"""
@@ -211,12 +206,20 @@ def scrape_one_page(offset: int):
     print(f"Page offset={offset} → {len(ads)} annonces")
     return [extract_ad_data(ad) for ad in ads]
 
-def scrape_all():
+def count_csv_lines(filename):
+    """Compte les lignes d'un CSV (sans l'en-tête)"""
+    if not os.path.exists(filename):
+        return 0
+    with open(filename, "r", encoding="utf-8") as f:
+        return sum(1 for _ in f) - 1  # retirer l'en-tête
+
+def scrape_all(max_pages=100):
     offset = get_progress()
     print(f"Reprise depuis offset {offset}")
     fieldnames = None
+    pages_scraped = 0
 
-    while True:
+    while pages_scraped < max_pages:
         ads_data = scrape_one_page(offset)
         if not ads_data:
             print("Fin du scraping, plus d’annonces.")
@@ -226,16 +229,15 @@ def scrape_all():
             fieldnames = list(ads_data[0].keys())
 
         save_to_csv(FILE_NAME, ads_data, fieldnames)
-        save_progress(offset + LIMIT) 
+        save_progress(offset + LIMIT)
 
         offset += LIMIT
+        pages_scraped += 1
 
-        # Si tu veux le rendre automatique → commente ce bloc
+        total_lignes = count_csv_lines(FILE_NAME)
+        print(f"Lignes ajoutées : {len(ads_data)} → Total exact dans le CSV : {total_lignes}")
 
-        cont = input("Voulez-vous continuer ? (o/n) : ").strip().lower()
-        if cont != "o":
-            print("⏹ Arrêt du scraping par l’utilisateur.")
-            break
+    print(f"Scraping terminé : {pages_scraped} pages traitées")
 
 if __name__ == "__main__":
-    scrape_all()
+    scrape_all(max_pages=100)  # 100 pages × 100 annonces = 10 000 annonces
