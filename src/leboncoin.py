@@ -96,7 +96,7 @@ headers = {
 }
 
 LIMIT = 100
-MAX_ITERATIONS = 10
+MAX_ITERATIONS = 100
 Path("./outputs").mkdir(exist_ok=True)
 FILE_NAME = f"./outputs/{time.time()}.csv"
 PROGRESS_FILE = "progress.txt"
