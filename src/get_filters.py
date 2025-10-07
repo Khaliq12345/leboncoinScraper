@@ -4,9 +4,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-class GetFilters:
-    def __init__(self):
-        self.cookies = {
+COOKIES = {
             "__Secure-Install": "36ae2011-5d35-4273-9d08-d42eb458331f",
             "cnfdVisitorId": "6cefd47c-0d9b-4ce7-9bc9-34c913d0b90b",
             "didomi_token": "eyJ1c2VyX2lkIjoiMTk4NmE1ZmYtNjUzNi02OGEyLWJlMDEtNTBlOGQ5OWVhNjA1IiwiY3JlYXRlZCI6IjIwMjUtMDgtMDJUMTA6NDI6MTAuNjQzWiIsInVwZGF0ZWQiOiIyMDI1LTA4LTAyVDEwOjQyOjEyLjg3M1oiLCJ2ZW5kb3JzIjp7ImVuYWJsZWQiOlsiZ29vZ2xlIiwiYzpsYmNmcmFuY2UiLCJjOmdvb2dsZWFuYS00VFhuSmlnUiIsImM6cHVycG9zZWxhLTN3NFpmS0tEIiwiYzptNnB1YmxpY2ktdFhUWUROQWMiLCJjOmFmZmlsaW5ldCIsImM6c3BvbmdlY2VsbC1ueXliQUtIMiIsImM6dGlrdG9rLXJLQVlEZ2JIIiwiYzp6YW5veC1hWVl6NnpXNCIsImM6cGludGVyZXN0IiwiYzpwcmViaWRvcmctSGlqaXJZZGIiLCJjOmlnbml0aW9uby1MVkFNWmRuaiIsImM6ZGlkb21pIiwiYzpsYmNmcmFuY2UtSHkza1lNOUYiXX0sInB1cnBvc2VzIjp7ImVuYWJsZWQiOlsiZXhwZXJpZW5jZXV0aWxpc2F0ZXVyIiwibWVzdXJlYXVkaWVuY2UiLCJwZXJzb25uYWxpc2F0aW9ubWFya2V0aW5nIiwicHJpeCIsImRldmljZV9jaGFyYWN0ZXJpc3RpY3MiLCJjb21wYXJhaXNvLVkzWnkzVUV4IiwiZ2VvbG9jYXRpb25fZGF0YSJdfSwidmVuZG9yc19saSI6eyJlbmFibGVkIjpbImdvb2dsZSIsImM6cHVycG9zZWxhLTN3NFpmS0tEIl19LCJ2ZXJzaW9uIjoyLCJhYyI6IkRDS0FnQUZrQTl3Q1N3SWtnUlRBNmNDQmdFVkFKclFVR0FvUkJYT0N3WUZ0NExsZ1lSQUEuRENLQWdBRmtBOXdDU3dJa2dSVEE2Y0NCZ0VWQUpyUVVHQW9SQlhPQ3dZRnQ0TGxnWVJBQSJ9",
@@ -36,7 +34,7 @@ class GetFilters:
             "datadome": "oByi0lZUHjjWwAhw~trg93VaLF8VHfDi1kjHn6Th2DZeOH3iOR2lUl0V5RquvjNxLqPRXIxQbTS~GV2AAhM3fCeeUBqmTc4hB_oIcsbuGU70YfVXQFfsGozhGyra7~wg",
         }
 
-        self.headers = {
+HEADERS = {
             "accept": "*/*",
             "accept-language": "en-US,en;q=0.9",
             "api_key": "ba0c2dad52b3ec",
@@ -54,12 +52,19 @@ class GetFilters:
             "x-lbc-experiment": "eyJ2ZXJzaW9uIjoxLCJyb2xsb3V0X3Zpc2l0b3JfaWQiOiI2Y2VmZDQ3Yy0wZDliLTRjZTctOWJjOS0zNGM5MTNkMGI5MGIifQ==",
         }
 
-        # List where filters with < 3000 vehicles will be stored
+
+class GetFilters:
+    def __init__(self):
+        """
+        Initialize the scraper with two lists:
+        - self.filters : filters with < 3000 ads
+        - self.over_3000_filters : filters with > 3000 ads
+        """
         self.filters: list[dict] = []
         self.over_3000_filters: list[dict] = []
 
     # =====================================================
-    # Retrieving available filters
+    # Retrieve available filters from Leboncoin API
     # =====================================================
     def get_filtre(
         self,
@@ -71,6 +76,12 @@ class GetFilters:
         gearbox: Optional[str] = None,
         owner_type: Optional[str] = None,
     ):
+        """
+        Send a POST request to retrieve available filters according to hierarchy.
+        Returns a dictionary with models, colors, types, fuels, gearboxes, and owner types.
+        """
+        logging.info(f"Starting get_filtre for brand={brand}, model={model}, color={color}")
+
         json_data = {
             "filters": {
                 "category": {"id": "2"},
@@ -94,20 +105,21 @@ class GetFilters:
         try:
             response = requests.post(
                 "https://api.leboncoin.fr/finder/search",
-                cookies=self.cookies,
-                headers=self.headers,
+                cookies=COOKIES,
+                headers=HEADERS,
                 json=json_data,
             )
-            response.raise_for_status()  # Vérifie le statut HTTP
-            data = response.json()       # Essaie de parser le JSON
+            response.raise_for_status()  # Check HTTP status
+            data = response.json()       # Parse JSON
+            logging.info("Request successful")
         except requests.HTTPError as e:
-            logging.info("Erreur HTTP :%s", e)
+            logging.info("HTTP Error: %s", e)
             return {}
-        except ValueError:  # JSON invalide
-            logging.info("Erreur JSON pour le filtre :%s", json_data)
+        except ValueError:
+            logging.info("Invalid JSON for filter: %s", json_data)
             return {}
-        except requests.RequestException as e:  # Autres erreurs requests
-            logging.info("Erreur requête :%s", e)
+        except requests.RequestException as e:
+            logging.info("Request exception: %s", e)
             return {}
 
         aggregations = data.get("aggregations", {})
@@ -121,7 +133,7 @@ class GetFilters:
         }
 
     # =====================================================
-    # Building a filter
+    # Build a single filter for a request
     # =====================================================
     def build_filtre(
         self,
@@ -135,6 +147,10 @@ class GetFilters:
         limit: int = 100,
         offset: int = 0,
     ) -> dict:
+        """
+        Build the JSON structure to retrieve ads according to the given criteria.
+        """
+        logging.info(f"Building filter: brand={brand}, model={model}, color={color}, type={vehicle_type}")
         enums = {"ad_type": ["offer"], "u_car_brand": [brand]}
         if model:
             enums["u_car_model"] = [model]
@@ -159,144 +175,101 @@ class GetFilters:
         }
 
     # =====================================================
-    # Hierarchical management of filters
+    # Hierarchical handling methods
     # =====================================================
     def handle_models(self, brand: str, models: dict) -> None:
+        logging.info(f"Handling models for brand={brand}")
         for model, total_number in models.items():
             if "_model_all" in model:
                 logging.info(f"Ignoring model: {model}")
                 continue
-
             if total_number < 3000:
+                logging.info(f"Adding filter for model {model} (<3000 ads)")
                 filtre = self.build_filtre(brand, model=model)
                 self.filters.append(filtre)
             else:
+                logging.info(f"Model {model} exceeds 3000 ads, drilling down to colors")
                 color_filters = self.get_filtre(brand, model=model)
                 self.handle_colors(brand, model, color_filters["colors"])
 
     def handle_colors(self, brand: str, model: str, colors: dict) -> None:
+        logging.info(f"Handling colors for model={model}")
         for color, total_number in colors.items():
             if total_number < 3000:
+                logging.info(f"Adding filter for color {color} (<3000 ads)")
                 filtre = self.build_filtre(brand, model=model, color=color)
                 self.filters.append(filtre)
             else:
+                logging.info(f"Color {color} exceeds 3000 ads, drilling down to types")
                 type_filters = self.get_filtre(brand, model=model, color=color)
                 self.handle_types(brand, model, color, type_filters["types"])
 
     def handle_types(self, brand: str, model: str, color: str, types: dict) -> None:
+        logging.info(f"Handling types for color={color}")
         for vehicle_type, total_number in types.items():
             if total_number < 3000:
-                filtre = self.build_filtre(
-                    brand, model=model, color=color, vehicle_type=vehicle_type
-                )
+                logging.info(f"Adding filter for type {vehicle_type} (<3000 ads)")
+                filtre = self.build_filtre(brand, model=model, color=color, vehicle_type=vehicle_type)
                 self.filters.append(filtre)
             else:
-                fuel_filters = self.get_filtre(
-                    brand, model=model, color=color, vehicle_type=vehicle_type
-                )
-                self.handle_fuels(
-                    brand, model, color, vehicle_type, fuel_filters["fuels"]
-                )
+                logging.info(f"Type {vehicle_type} exceeds 3000 ads, drilling down to fuels")
+                fuel_filters = self.get_filtre(brand, model=model, color=color, vehicle_type=vehicle_type)
+                self.handle_fuels(brand, model, color, vehicle_type, fuel_filters["fuels"])
 
     def handle_fuels(self, brand, model, color, vehicle_type, fuels) -> None:
+        logging.info(f"Handling fuels for type={vehicle_type}")
         for fuel, total_number in fuels.items():
             if total_number < 3000:
-                filtre = self.build_filtre(
-                    brand,
-                    model=model,
-                    color=color,
-                    vehicle_type=vehicle_type,
-                    fuel=fuel,
-                )
+                logging.info(f"Adding filter for fuel {fuel} (<3000 ads)")
+                filtre = self.build_filtre(brand, model=model, color=color, vehicle_type=vehicle_type, fuel=fuel)
                 self.filters.append(filtre)
             else:
-                gearbox_filters = self.get_filtre(
-                    brand,
-                    model=model,
-                    color=color,
-                    vehicle_type=vehicle_type,
-                    fuel=fuel,
-                )
-                self.handle_gearboxes(
-                    brand,
-                    model,
-                    color,
-                    vehicle_type,
-                    fuel,
-                    gearbox_filters["gearboxes"],
-                )
+                logging.info(f"Fuel {fuel} exceeds 3000 ads, drilling down to gearboxes")
+                gearbox_filters = self.get_filtre(brand, model=model, color=color, vehicle_type=vehicle_type, fuel=fuel)
+                self.handle_gearboxes(brand, model, color, vehicle_type, fuel, gearbox_filters["gearboxes"])
 
     def handle_gearboxes(self, brand, model, color, vehicle_type, fuel, gearboxes) -> None:
+        logging.info(f"Handling gearboxes for fuel={fuel}")
         for gearbox, total_number in gearboxes.items():
             if total_number < 3000:
-                self.filters.append(
-                    self.build_filtre(
-                        brand,
-                        model=model,
-                        color=color,
-                        vehicle_type=vehicle_type,
-                        fuel=fuel,
-                        gearbox=gearbox,
-                    )
-                )
+                logging.info(f"Adding filter for gearbox {gearbox} (<3000 ads)")
+                self.filters.append(self.build_filtre(brand, model=model, color=color, vehicle_type=vehicle_type, fuel=fuel, gearbox=gearbox))
             else:
-                owner_filters = self.get_filtre(
-                    brand,
-                    model=model,
-                    color=color,
-                    vehicle_type=vehicle_type,
-                    fuel=fuel,
-                    gearbox=gearbox,
-                )
-                self.handle_owner_types(
-                    brand,
-                    model,
-                    color,
-                    vehicle_type,
-                    fuel,
-                    gearbox,
-                    owner_filters["owner_types"],
-                )
+                logging.info(f"Gearbox {gearbox} exceeds 3000 ads, drilling down to owner types")
+                owner_filters = self.get_filtre(brand, model=model, color=color, vehicle_type=vehicle_type, fuel=fuel, gearbox=gearbox)
+                self.handle_owner_types(brand, model, color, vehicle_type, fuel, gearbox, owner_filters["owner_types"])
 
-    def handle_owner_types(
-        self, brand, model, color, vehicle_type, fuel, gearbox, owner_types
-    ) -> None:
+    def handle_owner_types(self, brand, model, color, vehicle_type, fuel, gearbox, owner_types) -> None:
+        logging.info(f"Handling owner types for gearbox={gearbox}")
         for owner_type, total_number in owner_types.items():
             if total_number < 3000:
-                self.filters.append(
-                    self.build_filtre(
-                        brand,
-                        model=model,
-                        color=color,
-                        vehicle_type=vehicle_type,
-                        fuel=fuel,
-                        gearbox=gearbox,
-                        owner_type=owner_type,
-                    )
-                )
+                logging.info(f"Adding filter for owner type {owner_type} (<3000 ads)")
+                self.filters.append(self.build_filtre(brand, model=model, color=color, vehicle_type=vehicle_type, fuel=fuel, gearbox=gearbox, owner_type=owner_type))
             else:
-                self.over_3000_filters.append(
-                    {
-                        "brand": brand,
-                        "model": model,
-                        "color": color,
-                        "type": vehicle_type,
-                        "fuel": fuel,
-                        "gearbox": gearbox,
-                        "owner_type": owner_type,
-                        "total": total_number,
-                    }
-                )
+                logging.info(f"Owner type {owner_type} exceeds 3000 ads, adding to over_3000_filters")
+                self.over_3000_filters.append({
+                    "brand": brand,
+                    "model": model,
+                    "color": color,
+                    "type": vehicle_type,
+                    "fuel": fuel,
+                    "gearbox": gearbox,
+                    "owner_type": owner_type,
+                    "total": total_number,
+                })
 
     # =====================================================
-    # Main process
+    # Main execution method
     # =====================================================
     def run(self, brand: str) -> None:
+        logging.info(f"Starting scraping process for brand={brand}")
         model_filters = self.get_filtre(brand)
         self.handle_models(brand, model_filters["models"])
 
-        logging.info("\n Filtres collectés (< 3000 annonces):%d", len(self.filters))
-        logging.info("Filtres dépassant 3000 annonces: %d", len(self.over_3000_filters))
+        logging.info("Scraping finished")
+        logging.info("Collected filters (<3000 ads): %d", len(self.filters))
+        logging.info("Filters exceeding 3000 ads: %d", len(self.over_3000_filters))
+        print(self.filters)
 
 
 if __name__ == "__main__":
