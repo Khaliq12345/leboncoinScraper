@@ -55,6 +55,7 @@ def get_filtre(
     model: Optional[str] = None,
     color: Optional[str] = None,
     vehicle_type: Optional[str] = None,
+    full: Optional[str] = None,
 ):
     """
     Sends a request to the Leboncoin API to retrieve the list of filters (models, colors, types)
@@ -73,6 +74,7 @@ def get_filtre(
                 "u_car_model": [model] if model else [],
                 "vehicule_color": [color] if color else [],
                 "vehicle_type": [vehicle_type] if vehicle_type else [],
+                "full": [full] if full else [],
             },
             "ranges": {},
         },
@@ -89,14 +91,15 @@ def get_filtre(
     response.raise_for_status()
     json_data = response.json()
     aggregations = json_data.get("aggregations")
-    models = aggregations.get("u_car_model")
-    colors = aggregations.get("vehicule_color")
-    types = aggregations.get("vehicle_type")
+    models = aggregations.get("u_car_model", {})
+    colors = aggregations.get("vehicule_color", {})
+    types = aggregations.get("vehicle_type", {})
     return {
         "models": models,
         "colors": colors,
         "types": types,
     }
+
 
 # 🔹 Function placeholder: retrieves the real data for a given filter combination
 # ----------------------------------------------------------
@@ -107,9 +110,10 @@ def get_filtre(
 # - Store or process this data (e.g., save it in a CSV or database).
 # ----------------------------------------------------------
 
+
 def get_data(filtre: dict) -> None:
     print("-----------------")
-    print(filtre)
+    # print(filtre)
     pass
 
 
@@ -120,7 +124,7 @@ def handle_models(brand: str, models: dict):
     """
     for model, total_number in models.items():
         print("--------------MODEL-------------------")
-        print(f"Model - {model} | Total - {total_number}")
+        # print(f"Model - {model} | Total - {total_number}")
 
         if total_number < 3000:
             filtre = build_filtre(brand, model=model)
@@ -136,7 +140,7 @@ def handle_colors(brand: str, model: str, colors: dict):
     """
     for color, total_number in colors.items():
         print("--------------COLOR-------------------")
-        print(f"Color - {color} | Total - {total_number}")
+        # print(f"Color - {color} | Total - {total_number}")
 
         if total_number < 3000:
             filtre = build_filtre(brand, model=model, color=color)
@@ -152,7 +156,7 @@ def handle_types(brand: str, model: str, color: str, types: dict):
     """
     for vehicle_type, total_number in types.items():
         print("--------------TYPE-------------------")
-        print(f"Type - {vehicle_type} | Total - {total_number}")
+        # print(f"Type - {vehicle_type} | Total - {total_number}")
 
         if total_number < 3000:
             filtre = build_filtre(
@@ -162,11 +166,14 @@ def handle_types(brand: str, model: str, color: str, types: dict):
 
 
 def build_filtre(
-    brand: str, model: str = None, color: str = None, vehicle_type: str = None
+    brand: str,
+    model: Optional[str] = None,
+    color: Optional[str] = None,
+    vehicle_type: Optional[str] = None,
+    full: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
 ) -> dict:
-    """
-    Dynamically builds the filter dictionary used to request data from the API.
-    """
     enums = {"ad_type": ["offer"], "u_car_brand": [brand]}
     if model:
         enums["u_car_model"] = [model]
@@ -174,24 +181,47 @@ def build_filtre(
         enums["vehicule_color"] = [color]
     if vehicle_type:
         enums["vehicle_type"] = [vehicle_type]
+    if full:
+        enums["full"] = [full]
 
     return {
         "filters": {"category": {"id": "2"}, "enums": enums},
-        "limit": 100,
-        "offset": 0,
+        "limit": limit,
+        "offset": offset,
         "sort_by": "relevance",
         "disable_total": True,
         "listing_source": "pagination",
     }
 
 
+def handle_full(brand: str, fulls: dict):
+    """
+    Iterates over 'full' filter options for a given brand.
+    If total number exceeds 3000, just prints a message.
+    """
+    for full, total_number in fulls.items():
+        print("--------------FULL-------------------")
+        # print(f"Full - {full} | Total - {total_number}")
+
+        if total_number < 3000:
+            filtre = build_filtre(brand, full=full)
+            get_data(filtre)
+        else:
+            # If still more than 3000, we just log it
+            print(
+                f"Too many ads for full='{full}' ({total_number} > 3000), skipping detailed fetch."
+            )
+
+
 def main(brand: str):
     """
-    Main entry point — starts the model collection process for a given car brand.
+    Main entry point — starts the collection process for a given car brand.
     """
     model_filters = get_filtre(brand)
     models = model_filters["models"]
     handle_models(brand, models)
+    full_filters = get_filtre(brand, full="full")
+    handle_full(brand, full_filters.get("full", {}))
 
 
-main("PEUGEOT")
+main("VOLKSWAGEN")
