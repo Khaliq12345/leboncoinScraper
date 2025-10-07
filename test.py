@@ -56,6 +56,10 @@ def get_filtre(
     color: Optional[str] = None,
     vehicle_type: Optional[str] = None,
 ):
+    """
+    Sends a request to the Leboncoin API to retrieve the list of filters (models, colors, types)
+    available for a given brand, model, or color.
+    """
     json_data = {
         "filters": {
             "category": {
@@ -94,6 +98,14 @@ def get_filtre(
         "types": types,
     }
 
+# 🔹 Function placeholder: retrieves the real data for a given filter combination
+# ----------------------------------------------------------
+# This function should:
+# - Send a request to the Leboncoin API using the provided filter.
+# - Retrieve all pages of ads (using pagination if necessary).
+# - Extract useful information from each ad (title, price, mileage, year, etc.).
+# - Store or process this data (e.g., save it in a CSV or database).
+# ----------------------------------------------------------
 
 def get_data(filtre: dict) -> None:
     print("-----------------")
@@ -101,37 +113,85 @@ def get_data(filtre: dict) -> None:
     pass
 
 
-def main(brand: str):
-    filters = get_filtre(brand)
-    models = filters["models"]
-    for model in models:
+def handle_models(brand: str, models: dict):
+    """
+    Iterates over models and decides whether to go deeper (color level)
+    or to retrieve data directly if the total is small enough.
+    """
+    for model, total_number in models.items():
         print("--------------MODEL-------------------")
-        total_number = models[model]
         print(f"Model - {model} | Total - {total_number}")
-        if total_number < 3000:
-            data_filtre = {
-                "filters": {
-                    "category": {"id": "2"},
-                    "enums": {"ad_type": ["offer"]},
-                    "u_car_brand": brand,
-                    "u_car_model": model,
-                },
-                "limit": 100,
-                "offset": 0,
-                "sort_by": "relevance",
-                "disable_total": True,
-                "listing_source": "pagination",
-            }
-            get_data(data_filtre)
-            continue
 
-        print("Total Number Less than 3000 - Getting color filters")
-        model_filters = get_filtre(brand, model)
-        colors = model_filters["colors"]
-        for color in colors:
-            print("--------------COLOR-------------------")
-            total_number = colors[color]
-            print(f"color - {color} | Total - {total_number}")
+        if total_number < 3000:
+            filtre = build_filtre(brand, model=model)
+            get_data(filtre)
+        else:
+            color_filters = get_filtre(brand, model=model)
+            handle_colors(brand, model, color_filters["colors"])
+
+
+def handle_colors(brand: str, model: str, colors: dict):
+    """
+    Iterates over colors for a given model.
+    """
+    for color, total_number in colors.items():
+        print("--------------COLOR-------------------")
+        print(f"Color - {color} | Total - {total_number}")
+
+        if total_number < 3000:
+            filtre = build_filtre(brand, model=model, color=color)
+            get_data(filtre)
+        else:
+            type_filters = get_filtre(brand, model=model, color=color)
+            handle_types(brand, model, color, type_filters["types"])
+
+
+def handle_types(brand: str, model: str, color: str, types: dict):
+    """
+    Iterates over vehicle types for a given model and color.
+    """
+    for vehicle_type, total_number in types.items():
+        print("--------------TYPE-------------------")
+        print(f"Type - {vehicle_type} | Total - {total_number}")
+
+        if total_number < 3000:
+            filtre = build_filtre(
+                brand, model=model, color=color, vehicle_type=vehicle_type
+            )
+            get_data(filtre)
+
+
+def build_filtre(
+    brand: str, model: str = None, color: str = None, vehicle_type: str = None
+) -> dict:
+    """
+    Dynamically builds the filter dictionary used to request data from the API.
+    """
+    enums = {"ad_type": ["offer"], "u_car_brand": [brand]}
+    if model:
+        enums["u_car_model"] = [model]
+    if color:
+        enums["vehicule_color"] = [color]
+    if vehicle_type:
+        enums["vehicle_type"] = [vehicle_type]
+
+    return {
+        "filters": {"category": {"id": "2"}, "enums": enums},
+        "limit": 100,
+        "offset": 0,
+        "sort_by": "relevance",
+        "disable_total": True,
+        "listing_source": "pagination",
+    }
+
+
+def main(brand: str):
+    """
+    Main entry point — starts the model collection process for a given car brand.
+    """
+    model_filters = get_filtre(brand)
+    models = model_filters["models"]
+    handle_models(brand, models)
 
 
 main("PEUGEOT")
