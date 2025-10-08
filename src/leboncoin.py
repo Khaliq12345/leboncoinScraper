@@ -1,3 +1,5 @@
+from copy import deepcopy
+import json
 import time
 from pathlib import Path
 import requests
@@ -5,6 +7,15 @@ import unicodedata
 import re
 import os
 import pandas as pd
+from argparse import ArgumentParser
+
+parser = ArgumentParser()
+parser.add_argument("--brand", type=str, required=True)
+parser.add_argument("--new", type=str, required=True, choices=["yes", "no"])
+parsed_arg = parser.parse_args()
+brand = parsed_arg.brand
+new = parsed_arg.new
+
 
 # Champs à récupérer depuis attributes
 ATTR_FIELDS = [
@@ -63,19 +74,17 @@ cookies = {
     "_fbp": "fb.1.1754207399461.156474195924338493",
     "_scid": "6iUW8A2nKR2Dg6U2tXAVKRs60nB4zRuY",
     "lg": "9",
-    "FPLC": "l3Az%2FUuNvhDIBLCb4FftzI%2FrvcGf0l3gRbcVOvhbH%2FR%2FLaFdbjzkzhlCnUTFFig%2FY7exKRaMHPgMXZmSTI2lOvQtXNXhDJGhVNCLrOoAquB3G0mB2GxEXfLqNSbW6w%3D%3D",
     "_ScCbts": "%5B%5D",
     "_sctr": "1%7C1759359600000",
-    "_scid_r": "-6UW8A2nKR2Dg6U2tXAVKRs60nB4zRuYcGgifw",
-    "cto_bundle": "Svc2R19FbUVLbFRBR1hoRjVkc0V1UnlqUUROWWFFalVNbEVyc2tIdkphUlFpQjBZRE1RNVZSSVIlMkJpRUF3QXBjOFdMd084cUlwTDBFJTJCNXM1Z0pJRGNRNG1KN1RQbnUxcjl2WTBtclJoJTJCT3glMkJaJTJGVzUlMkJ3c2FDSXhRdzhJUkVRQUgwWXFsVGxoMnNNcW5OMEpmaEpqcGdiWVRzVDdxa29oa29wRWVic2xzMUEzMFE5bnclM0Q",
-    "ry_ry-l3b0nco_so_realytics": "eyJpZCI6InJ5X0VGOTAzQ0U2LTFFQzktNDYzOS04MzNBLUY1NzZFNjVCQTlCRSIsImNpZCI6bnVsbCwib3JpZ2luIjp0cnVlLCJyZWYiOm51bGwsImNvbnQiOm51bGwsIm5zIjp0cnVlLCJzYyI6Im9rIiwic3AiOm51bGx9",
-    "__gads": "ID=aacc7c3b980ef105:T=1754207334:RT=1759389818:S=ALNI_MbkArq2M_cUnYFwLV1ZEZXIAP9Tfw",
-    "__gpi": "UID=00001243a1aa4db2:T=1754207334:RT=1759389818:S=ALNI_MYTmGBVUQA82DutdqJJcnE5S1VGcg",
-    "__eoi": "ID=6a69744913b00b24:T=1754207334:RT=1759389818:S=AA-AfjZjG2ffcw1fDjRmsFKHAx6I",
-    "datadome": "xAGn2evbgPaalmaWkenmjtDauYEs81yMiE6j3Xd9Y_TQ~pnAKBJl~kilB6OQJYEDAZna9ZlV630XWG2XV8aW9xP1oUCD4HpOOATA0oCpBQ_1A5QFVW9pGFD2NSiYX7Nr",
-    "_ga_Z707449XJ2": "GS2.1.s1759389296$o17$g1$t1759389825$j50$l0$h152971888",
+    "FPLC": "8nNU0C5f4hoxYeNiflIFiEon0o%2B%2FcVAkyiCsSAHo8m3a7ueYv%2FW8eCKHzIQW3V9gQ0S%2Fgd0WnkMM0R4vX2WBLSgMiNOxa5MFEGddO1rcYX0LyJQvk1QfEEs8KlpVXw%3D%3D",
+    "cto_bundle": "M67pI19FbUVLbFRBR1hoRjVkc0V1UnlqUURIZGRGVWZlM0ZBUFY2WEwlMkJnVGJBJTJCQ3hBM204ZEMzZGp5YWR1UVBuV2wxRnZDJTJGaXlCSmVZWiUyRm0lMkZTSTk2ZnZZT0hsS21Sa1pwQnpQdHVLczhzZWMxQjlCa0JYaDM4dE5DMzklMkZPUjZlWTh6eCUyRlpJJTJCcVhzTUpBNk9FYXo0emNzU3olMkZtMHRjOVNZd21FM0w3S0Z3UUVzOUklM0Q",
+    "_scid_r": "_qUW8A2nKR2Dg6U2tXAVKRs60nB4zRuYcGgigQ",
+    "_ga_Z707449XJ2": "GS2.1.s1759846567$o26$g0$t1759846567$j60$l0$h672542517",
+    "__gads": "ID=aacc7c3b980ef105:T=1754207334:RT=1759864187:S=ALNI_MbkArq2M_cUnYFwLV1ZEZXIAP9Tfw",
+    "__gpi": "UID=00001243a1aa4db2:T=1754207334:RT=1759864187:S=ALNI_MYTmGBVUQA82DutdqJJcnE5S1VGcg",
+    "__eoi": "ID=6a69744913b00b24:T=1754207334:RT=1759864187:S=AA-AfjZjG2ffcw1fDjRmsFKHAx6I",
+    "datadome": "dTHywwQu006BzyQ4CntX3447dfrPBgGPoo4cg3_QG~lMf8Fueigzfkt85c~SMqQc3JyDyuV~W6kYLurIE3whVzhSBGnDkJwBmCEvr6eiyrZgD3XAbjd2thiwOhLpr7_m",
 }
-
 
 headers = {
     "accept": "*/*",
@@ -98,8 +107,9 @@ headers = {
 LIMIT = 100
 MAX_ITERATIONS = 100
 Path("./outputs").mkdir(exist_ok=True)
-FILE_NAME = f"./outputs/{time.time()}.csv"
+FILE_NAME = f"./outputs/{brand}.csv"
 PROGRESS_FILE = "progress.txt"
+FILTERS_PATH = "./filters.json"
 
 
 def normalize_key(key):
@@ -122,16 +132,18 @@ def get_progress():
     if os.path.exists(PROGRESS_FILE):
         with open(PROGRESS_FILE, "r") as f:
             try:
-                return int(f.read().strip())
+                output = f.read().strip()
+                offset, filter_num = output.split(":")
+                return int(offset), int(filter_num)
             except ValueError:
-                return 0
-    return 0
+                return 0, 0
+    return 0, 0
 
 
-def save_progress(offset):
+def save_progress(offset, filter_num):
     """Sauvegarde l’offset dans progress.txt"""
     with open(PROGRESS_FILE, "w") as f:
-        f.write(str(offset))
+        f.write(f"{offset}:{filter_num}")
 
 
 def extract_ad_data(ad: dict) -> dict:
@@ -141,7 +153,8 @@ def extract_ad_data(ad: dict) -> dict:
     ad_info["url"] = ad.get("url")
     ad_info["first_publication_date"] = ad.get("first_publication_date")
     ad_info["index_date"] = ad.get("index_date")
-    ad_info["price"] = ad.get("price", [None])[0] if ad.get("price") else None
+    price_node = ad.get("price")
+    ad_info["price"] = f"{price_node[0]} €" if price_node else 0
 
     # Attributes
     attr_dict = {normalize_key(f): None for f in ATTR_FIELDS}
@@ -168,20 +181,10 @@ def extract_ad_data(ad: dict) -> dict:
     return ad_info
 
 
-def scrape_one_page(offset: int):
+def scrape_one_page(offset: int, filter: dict):
     """Scrape une page et retourne les annonces parsées"""
-    json_data = {
-        "filters": {
-            "category": {"id": "2"},
-            "enums": {"ad_type": ["offer"]},
-        },
-        "limit": LIMIT,
-        "offset": offset,
-        "sort_by": "relevance",
-        "disable_total": True,
-        "listing_source": "pagination",
-    }
-
+    json_data = deepcopy(filter)
+    json_data["offset"] = offset
     response = requests.post(
         "https://api.leboncoin.fr/finder/search",
         cookies=cookies,
@@ -204,25 +207,39 @@ def scrape_one_page(offset: int):
 
 
 def scrape_all():
-    offset = get_progress()
-    print(f"Reprise depuis offset {offset}")
+    if new == "no":
+        offset, filter_num = get_progress()
+    else:
+        offset, filter_num = 0, 0
+    print(f"Reprise depuis offset {offset} | Filter {filter_num}")
     pages_scraped = 0
-    outputs_ads = []
 
-    while pages_scraped < MAX_ITERATIONS:
-        ads_data = scrape_one_page(offset)
-        if not ads_data:
-            print("Fin du scraping, plus d’annonces.")
-            break
+    with open(FILTERS_PATH, "r") as f:
+        json_str = f.read()
+        filters = json.loads(json_str)
 
-        outputs_ads.extend(ads_data)
+    for filter in filters[filter_num:]:
+        outputs_ads = []
+        while True:
+            print(f"FILTER - {filter}")
+            ads_data = scrape_one_page(offset, filter)
+            if not ads_data:
+                print("Fin du scraping, plus d’annonces.")
+                offset = 0
+                filter_num += 1
+                break
 
-        offset += LIMIT
-        pages_scraped += 1
+            outputs_ads.extend(ads_data)
 
-    save_progress(offset)
-    df = pd.DataFrame(outputs_ads)
-    df.to_csv(FILE_NAME, index=False)
+            offset += LIMIT
+            pages_scraped += 1
+
+        save_progress(offset, filter_num)
+        df = pd.DataFrame(outputs_ads)
+        if os.path.exists(FILE_NAME):
+            df.to_csv(FILE_NAME, index=False, mode="a", header=False)
+        else:
+            df.to_csv(FILE_NAME, index=False)
 
     print(f"Scraping terminé : {pages_scraped} pages traitées")
 
